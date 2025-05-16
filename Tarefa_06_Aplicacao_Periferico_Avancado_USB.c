@@ -1,13 +1,21 @@
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
+#include "hardware/i2c.h"
 #include "tusb.h"
+#include "ssd1306.h"
+#include "ssd1306_i2c.h"
 
 // Definições dos pinos
 #define LED_VERMELHO 13
 #define LED_VERDE    11
 #define LED_AZUL     12
 #define BUZZER       10
+#define I2C_SDA_PIN  14
+#define I2C_SCL_PIN  15
+
+// Objeto global para o display
+ssd1306_t display;
 
 void init_perifericos() {
     gpio_init(LED_VERMELHO);
@@ -21,6 +29,29 @@ void init_perifericos() {
 
     gpio_init(BUZZER);
     gpio_set_dir(BUZZER, GPIO_OUT);
+}
+
+void init_display() {
+    i2c_init(i2c1, 400 * 1000); // 400 kHz
+    gpio_set_function(I2C_SDA_PIN, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL_PIN, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C_SDA_PIN);
+    gpio_pull_up(I2C_SCL_PIN);
+
+    ssd1306_init_bm(&display, 128, 64, false, ssd1306_i2c_address, i2c1);
+    ssd1306_config(&display);
+    ssd1306_init(); // Inicialização obrigatória para evitar distorções
+}
+
+void limpa_display() {
+    memset(display.ram_buffer + 1, 0, display.bufsize - 1);
+    ssd1306_send_data(&display);
+}
+
+void imprime_display(char *texto) {
+    limpa_display();
+    ssd1306_draw_string(display.ram_buffer + 1, 0, 0, texto);
+    ssd1306_send_data(&display);
 }
 
 void acende_led(int gpio) {
@@ -38,11 +69,13 @@ void toca_buzzer() {
 int main() {
     stdio_init_all();
     init_perifericos();
+    init_display();
 
     // Aguarda conexão USB
     while (!tud_cdc_connected()) {
         sleep_ms(100);
     }
+
     printf("USB conectado!\n");
     printf("Digite:\n");
     printf(" - 'vermelho', 'verde' ou 'azul' para acender o LED correspondente.\n");
@@ -51,21 +84,24 @@ int main() {
     while (true) {
         if (tud_cdc_available()) {
             uint8_t buf[64];
-            uint32_t count = tud_cdc_read(buf, sizeof(buf));
+            uint32_t count = tud_cdc_read(buf, sizeof(buf) - 1);
             buf[count] = '\0'; // Garante término da string
 
-            // ECO: Envia de volta o comando
+            // ECO no USB Serial
             tud_cdc_write(buf, count);
             tud_cdc_write_flush();
 
+            // Exibe no display OLED
+            imprime_display((char *)buf);
+
             // Verifica comandos
-            if (strstr((char*)buf, "vermelho")) {
+            if (strstr((char *)buf, "vermelho")) {
                 acende_led(LED_VERMELHO);
-            } else if (strstr((char*)buf, "verde")) {
+            } else if (strstr((char *)buf, "verde")) {
                 acende_led(LED_VERDE);
-            } else if (strstr((char*)buf, "azul")) {
+            } else if (strstr((char *)buf, "azul")) {
                 acende_led(LED_AZUL);
-            } else if (strstr((char*)buf, "som")) {
+            } else if (strstr((char *)buf, "som")) {
                 toca_buzzer();
             }
         }
