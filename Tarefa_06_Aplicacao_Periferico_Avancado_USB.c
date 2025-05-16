@@ -54,6 +54,16 @@ void imprime_display(char *texto) {
     ssd1306_send_data(&display);
 }
 
+void exibe_instrucoes_display() {
+    limpa_display();
+    ssd1306_draw_string(display.ram_buffer + 1, 0, 0, "Comandos:");
+    ssd1306_draw_string(display.ram_buffer + 1, 0, 10, "vermelho - LED");
+    ssd1306_draw_string(display.ram_buffer + 1, 0, 20, "verde    - LED");
+    ssd1306_draw_string(display.ram_buffer + 1, 0, 30, "azul     - LED");
+    ssd1306_draw_string(display.ram_buffer + 1, 0, 40, "som      - Buzzer");
+    ssd1306_send_data(&display);
+}
+
 void acende_led(int gpio) {
     gpio_put(gpio, 1);
     sleep_ms(1000);
@@ -70,6 +80,9 @@ int main() {
     stdio_init_all();
     init_perifericos();
     init_display();
+
+    // Exibe instruções no display logo ao ligar
+    exibe_instrucoes_display();
 
     // Aguarda conexão USB
     while (!tud_cdc_connected()) {
@@ -91,20 +104,29 @@ int main() {
             tud_cdc_write(buf, count);
             tud_cdc_write_flush();
 
-            // Exibe no display OLED
+            // Exibe o comando recebido no display
             imprime_display((char *)buf);
 
-            // Verifica comandos
+            // Verifica comandos e retorna à tela de instruções após 1s
             if (strstr((char *)buf, "vermelho")) {
                 acende_led(LED_VERMELHO);
+                sleep_ms(1000);
+                exibe_instrucoes_display();
             } else if (strstr((char *)buf, "verde")) {
                 acende_led(LED_VERDE);
+                sleep_ms(1000);
+                exibe_instrucoes_display();
             } else if (strstr((char *)buf, "azul")) {
                 acende_led(LED_AZUL);
+                sleep_ms(1000);
+                exibe_instrucoes_display();
             } else if (strstr((char *)buf, "som")) {
                 toca_buzzer();
+                sleep_ms(1000);
+                exibe_instrucoes_display();
             }
         }
+
         tud_task(); // Mantém o USB funcionando
     }
 
